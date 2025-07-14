@@ -105,7 +105,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
                 // 操作ボタン
                 ControlButtonsWidget(
                   onStart: () {
-                    addNoteToHistory('ド');
+                    addNoteToHistory('ド'); // 仮：ボタンで履歴追加
                   },
                   onStop: () {
                     // 停止処理（後で作る）
@@ -119,4 +119,28 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     );
   }
 }
+
+// 音階履歴UIの詳細UIを設計
+class NoteHistoryWidget extends StatelessWidget {
+  final List<String> noteHistory;
+
+  const NoteHistoryWidget({super.key, required this.noteHistory});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: noteHistory.map((note) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Text(note, style: const TextStyle(fontSize: 24)),
+          );
+        }).toList(),
+      ),
+    );
+  }
+}
+
+
 
