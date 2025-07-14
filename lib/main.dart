@@ -95,7 +95,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
                 const SizedBox(height: 24),
 
                 // 現在の音階
-                CurrentNotewidget(note: currentNote, fontSize: noteFontSize),
+                CurrentNoteWidget(note: currentNote, fontSize: noteFontSize),
                 const SizedBox(height: 16),
 
                 // 周波数表示
@@ -142,5 +142,15 @@ class NoteHistoryWidget extends StatelessWidget {
   }
 }
 
+// 現在の音階UIの詳細UIを設計
+class CurrentNoteWidget extends StatelessWidget {
+  final String note;
+  final double fontSize;
 
+  const CurrentNoteWidget({super.key, required this.note, required this.fontSize});
 
+  @override
+  Widget build(BuildContext context) {
+
+  }
+}
