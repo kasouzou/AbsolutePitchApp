@@ -151,6 +151,25 @@ class CurrentNoteWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return Text(
+      note,
+      style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
+    );
+  }
+}
 
+// 周波数表示UIの詳細UIを設計
+class FrequencyWidget extends StatelessWidget {
+  final double frequency;
+  final double fontSize;
+
+  const FrequencyWidget({super.key, required this.frequency, required this.fontSize});
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '${frequency.toStringAsFixed(1)} Hz',
+      style: TextStyle(fontSize: fontSize, color: Colors.grey[700]),
+    );
   }
 }
