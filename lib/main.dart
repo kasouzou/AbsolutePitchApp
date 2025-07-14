@@ -10,11 +10,10 @@ class AbsolutePitchApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-
     return MaterialApp(
       title: '絶対音感ビューア',
       theme: ThemeData(primarySwatch: Colors.indigo),
-      home: const AbsolutePitchViewer(),// 最初に表示する画面
+      home: const AbsolutePitchViewer(),
     );
   }
 }
@@ -170,6 +169,26 @@ class FrequencyWidget extends StatelessWidget {
     return Text(
       '${frequency.toStringAsFixed(1)} Hz',
       style: TextStyle(fontSize: fontSize, color: Colors.grey[700]),
+    );
+  }
+}
+
+// 操作ボタンUIの詳細UIを設計
+class ControlButtonsWidget extends StatelessWidget {
+  final VoidCallback onStart;
+  final VoidCallback onStop;
+
+  const ControlButtonsWidget({super.key, required this.onStart, required this.onStop});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children:[
+        ElevatedButton(onPressed: onStart, child: const Text('録音開始')),
+        const SizedBox(width: 20),
+        ElevatedButton(onPressed: onStop, child: const Text('停止')),
+      ]
     );
   }
 }
