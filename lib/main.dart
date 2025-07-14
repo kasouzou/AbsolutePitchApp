@@ -52,33 +52,35 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
 
           return Padding(
             padding: const EdgeInsets.all(24.0),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 音階履歴
-                NoteHistoryWidget(noteHistory: noteHistory),
-                const SizedBox(height: 24),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // 音階履歴
+                  NoteHistoryWidget(noteHistory: noteHistory),
+                  const SizedBox(height: 24),
 
-                // 現在の音階
-                CurrentNoteWidget(note: currentNote, fontSize: noteFontSize),
+                  // 現在の音階
+                  CurrentNoteWidget(note: currentNote, fontSize: noteFontSize),
 
-                const SizedBox(height: 16),
+                  const SizedBox(height: 16),
 
-                // 周波数表示
-                FrequencyWidget(frequency: frequency, fontSize: freqFontSize),
+                  // 周波数表示
+                  FrequencyWidget(frequency: frequency, fontSize: freqFontSize),
 
-                const SizedBox(height: 40),
+                  const SizedBox(height: 40),
 
-                // 操作ボタン
-                ControlButtonsWidget(
-                  onStart: () {
-                    addNoteToHistory('ド'); // 仮：ボタンで履歴追加
-                  },
-                  onStop: () {
-                    // 停止処理（あとで）
-                  },
-                ),
-              ],
+                  // 操作ボタン
+                  ControlButtonsWidget(
+                    onStart: () {
+                      addNoteToHistory('ド'); // 仮：ボタンで履歴追加
+                    },
+                    onStop: () {
+                      // 停止処理（あとで）
+                    },
+                  ),
+                ],
+              ),
             ),
           );
         },
