@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_fft/flutter_fft.dart';
 
 void main() {
   runApp(const AbsolutePitchApp());
@@ -10,7 +11,7 @@ class AbsolutePitchApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: '絶対音感ビューア',
+      title: '音階ビューア',
       theme: ThemeData(primarySwatch: Colors.indigo),
       home: const AbsolutePitchViewer(),
     );
@@ -25,9 +26,27 @@ class AbsolutePitchViewer extends StatefulWidget {
 }
 
 class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
+  FlutterFft flutterFft = FlutterFft();
   String currentNote = '...';
   double frequency = 0.0;
   List<String> noteHistory = [];
+  bool isRecording = false;
+
+  // 音階を日本語に変換するMap
+  final Map<String, String> noteToJapanese = {
+    'C': 'ド',
+    'C#': 'ド#',
+    'D': 'レ',
+    'D#': 'レ#',
+    'E': 'ミ',
+    'F': 'ファ',
+    'F#': 'ファ#',
+    'G': 'ソ',
+    'G#': 'ソ#',
+    'A': 'ラ',
+    'A#': 'ラ#',
+    'B': 'シ',
+  };
 
   void addNoteToHistory(String note) {
     setState(() {
