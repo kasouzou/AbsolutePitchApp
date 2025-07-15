@@ -56,7 +56,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
       isRecording = true;
     });
 
-    flutterFft.onRecorderStateChanged.listen((data) {
+    flutterFft.onRecorderStateChanged.listen((dynamic data) {
       if (data != null && data["note"] != null && data["note"] != "") {
         String note = data["note"]; // "C", "D", etc...
         double freq = data["frequency"] ?? 0.0;
