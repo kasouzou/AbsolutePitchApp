@@ -26,37 +26,82 @@ class AbsolutePitchViewer extends StatefulWidget {
 }
 
 class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
-  FlutterFft flutterFft = FlutterFft();
-  String currentNote = '...';
-  double frequency = 0.0;
-  List<String> noteHistory = [];
-  bool isRecording = false;
+  String currentNote = '...'; // 今の音階（最初は...で初期化）
+  double frequency = 0.0; // 今の周波数
+  List<String> noteHistory = []; // 音階の履歴（直近10件とか）
+  late FlutterFft flutterFft; // FFT解析用のインスタンス lateは初期化をあとで行う宣言（initStateで初期化）
+  bool isRecording = false; // 録音中かどうか
 
-  // 音階を日本語に変換するMap
-  final Map<String, String> noteToJapanese = {
-    'C': 'ド',
-    'C#': 'ド#',
-    'D': 'レ',
-    'D#': 'レ#',
-    'E': 'ミ',
-    'F': 'ファ',
-    'F#': 'ファ#',
-    'G': 'ソ',
-    'G#': 'ソ#',
-    'A': 'ラ',
-    'A#': 'ラ#',
-    'B': 'シ',
-  };
+  @override
+  // initState()はAbsolutePitchViewer（StatefulWidget）という画面用のWidgetsが生成されるときに1回だけ呼ばれるメソッド
+  void initState() {
+    super.initState(); // super.initState()は必ず先頭で呼ぶ（Flutterのルール）
+    flutterFft = FlutterFft(); // flutterFftをここで初期化
+  }
 
-  void addNoteToHistory(String note) {
+  // // テスト用にボタンを押したら履歴に「ド」とか追加する仕組みなので実際に音をとるコードを書いたら消してOK！！
+  // void addNoteToHistory(String note) {
+  //   setState(() {
+  //     currentNote = note;
+  //     frequency = 440.0; // 仮の周波数
+  //     noteHistory.add(note);
+  //     if (noteHistory.length > 10) {
+  //       noteHistory.removeAt(0);
+  //     }
+  //   });
+  // }
+  void startListening() async {
+    await flutterFft.startRecorder();
     setState(() {
-      currentNote = note;
-      frequency = 440.0; // 仮の周波数
-      noteHistory.add(note);
-      if (noteHistory.length > 10) {
-        noteHistory.removeAt(0);
+      isRecording = true;
+    });
+
+    flutterFft.onRecorderStateChanged.listen((data) {
+      if (data != null && data["note"] != null && data["note"] != "") {
+        String note = data["note"]; // "C", "D", etc...
+        double freq = data["frequency"] ?? 0.0;
+
+        // 日本語に変換（例: C → ド）
+        String japaneseNote = convertNoteToJapanese(note);
+
+        setState(() {
+          currentNote = japaneseNote;
+          frequency = freq;
+          noteHistory.add(japaneseNote);
+          if (noteHistory.length > 10) {
+            noteHistory.removeAt(0);
+          }
+        });
       }
     });
+  }
+
+  void stopListening() async {
+    await flutterFft.stopRecorder();
+    setState(() {
+      isRecording = false;
+    });
+  }
+
+  String convertNoteToJapanese(String note) {
+    switch (note) {
+      case 'C':
+        return 'ド';
+      case 'D':
+        return 'レ';
+      case 'E':
+        return 'ミ';
+      case 'F':
+        return 'ファ';
+      case 'G':
+        return 'ソ';
+      case 'A':
+        return 'ラ';
+      case 'B':
+        return 'シ';
+      default:
+        return note;
+    }
   }
 
   @override
@@ -91,12 +136,8 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
 
                   // 操作ボタン
                   ControlButtonsWidget(
-                    onStart: () {
-                      addNoteToHistory('ド'); // 仮：ボタンで履歴追加
-                    },
-                    onStop: () {
-                      // 停止処理（あとで）
-                    },
+                    onStart: startListening,
+                    onStop: stopListening,
                   ),
                 ],
               ),
