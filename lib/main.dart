@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_fft/flutter_fft.dart';
+import 'package:waveform_fft/waveform_fft.dart';
 
 void main() {
   runApp(const AbsolutePitchApp());
@@ -29,55 +29,47 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   String currentNote = '...'; // 今の音階（最初は...で初期化）
   double frequency = 0.0; // 今の周波数
   List<String> noteHistory = []; // 音階の履歴（直近10件とか）
-  late FlutterFft flutterFft; // FFT解析用のインスタンス lateは初期化をあとで行う宣言（initStateで初期化）
+  late final WaveformFft
+  waveformFft; // FFT解析用のインスタンス lateは初期化をあとで行う宣言（initStateで初期化）
   bool isRecording = false; // 録音中かどうか
 
   @override
   // initState()はAbsolutePitchViewer（StatefulWidget）という画面用のWidgetsが生成されるときに1回だけ呼ばれるメソッド
   void initState() {
     super.initState(); // super.initState()は必ず先頭で呼ぶ（Flutterのルール）
-    flutterFft = FlutterFft(); // flutterFftをここで初期化
-  }
+    waveformFft = WaveformFft(); // WaveformFftをここで初期化
 
-  // // テスト用にボタンを押したら履歴に「ド」とか追加する仕組みなので実際に音をとるコードを書いたら消してOK！！
-  // void addNoteToHistory(String note) {
-  //   setState(() {
-  //     currentNote = note;
-  //     frequency = 440.0; // 仮の周波数
-  //     noteHistory.add(note);
-  //     if (noteHistory.length > 10) {
-  //       noteHistory.removeAt(0);
-  //     }
-  //   });
-  // }
-  void startListening() async {
-    await flutterFft.startRecorder();
-    setState(() {
-      isRecording = true;
-    });
-
-    flutterFft.onRecorderStateChanged.listen((dynamic data) {
-      if (data != null && data["note"] != null && data["note"] != "") {
-        String note = data["note"]; // "C", "D", etc...
-        double freq = data["frequency"] ?? 0.0;
-
-        // 日本語に変換（例: C → ド）
-        String japaneseNote = convertNoteToJapanese(note);
-
+    // noteを受取るストリームにリスナーをセット
+    waveformFft.onNoteDetected.listen((note) {
+      if (note != null && note != '') {
+        String jpNote = convertNoteToJapanese(note);
         setState(() {
-          currentNote = japaneseNote;
-          frequency = freq;
-          noteHistory.add(japaneseNote);
+          currentNote = jpNote;
+          noteHistory.add(jpNote);
           if (noteHistory.length > 10) {
             noteHistory.removeAt(0);
           }
         });
       }
     });
+
+    // frequencyも受け取る
+    waveformFft.onFrequencyDetected.listen((freq) {
+      setState(() {
+        frequency = freq ?? 0.0;
+      });
+    });
+  }
+
+  void startListening() async {
+    await waveformFft.start();
+    setState(() {
+      isRecording = true;
+    });
   }
 
   void stopListening() async {
-    await flutterFft.stopRecorder();
+    await waveformFft.stop();
     setState(() {
       isRecording = false;
     });
@@ -87,16 +79,26 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     switch (note) {
       case 'C':
         return 'ド';
+      case 'C#':
+        return 'ド#';
       case 'D':
         return 'レ';
+      case 'D#':
+        return 'レ#';
       case 'E':
         return 'ミ';
       case 'F':
         return 'ファ';
+      case 'F#':
+        return 'ファ#';
       case 'G':
         return 'ソ';
+      case 'G#':
+        return 'ソ#';
       case 'A':
         return 'ラ';
+      case 'A#':
+        return 'ラ#';
       case 'B':
         return 'シ';
       default:
@@ -107,7 +109,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('絶対音感ビューア')),
+      appBar: AppBar(title: const Text('音階ビューア')),
       body: LayoutBuilder(
         builder: (context, constraints) {
           final isLargeScreen = constraints.maxWidth > 600;
@@ -136,6 +138,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
 
                   // 操作ボタン
                   ControlButtonsWidget(
+                    isRecording: isRecording,
                     onStart: startListening,
                     onStop: stopListening,
                   ),
