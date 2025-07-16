@@ -1,5 +1,8 @@
+import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:waveform_fft/waveform_fft.dart';
+import 'package:flutter_audio_capture/flutter_audio_capture.dart';
+import 'package:pitch_detector_dart/pitch_detector.dart';
 
 void main() {
   runApp(const AbsolutePitchApp());
@@ -7,7 +10,6 @@ void main() {
 
 class AbsolutePitchApp extends StatelessWidget {
   const AbsolutePitchApp({super.key});
-
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -20,85 +22,130 @@ class AbsolutePitchApp extends StatelessWidget {
 
 class AbsolutePitchViewer extends StatefulWidget {
   const AbsolutePitchViewer({super.key});
-
   @override
   State<AbsolutePitchViewer> createState() => _AbsolutePitchViewerState();
 }
 
 class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
-  String currentNote = '...'; // 今の音階（最初は...で初期化）
-  double frequency = 0.0; // 今の周波数
-  List<String> noteHistory = []; // 音階の履歴（直近10件とか）
-  late final WaveformFft
-  waveformFft; // FFT解析用のインスタンス lateは初期化をあとで行う宣言（initStateで初期化）
-  bool isRecording = false; // 録音中かどうか
+  final FlutterAudioCapture _audioCapture = FlutterAudioCapture();
+  late PitchDetector pitchDetector;
+
+  bool isRecording = false;
+  String currentNote = '...';
+  double frequency = 0.0;
+  List<String> noteHistory = [];
+
+  final int bufferSize = 2048;
+  final int sampleRate = 44100;
 
   @override
-  // initState()はAbsolutePitchViewer（StatefulWidget）という画面用のWidgetsが生成されるときに1回だけ呼ばれるメソッド
   void initState() {
-    super.initState(); // super.initState()は必ず先頭で呼ぶ（Flutterのルール）
-    waveformFft = WaveformFft(); // WaveformFftをここで初期化
+    super.initState();
+    pitchDetector = PitchDetector();
+  }
 
-    // noteを受取るストリームにリスナーをセット
-    waveformFft.onNoteDetected.listen((note) {
-      if (note != null && note != '') {
-        String jpNote = convertNoteToJapanese(note);
-        setState(() {
-          currentNote = jpNote;
-          noteHistory.add(jpNote);
-          if (noteHistory.length > 10) {
-            noteHistory.removeAt(0);
-          }
-        });
-      }
-    });
+  Float64List float32ToFloat64(Float32List inBuf) {
+    final out = Float64List(inBuf.length);
+    for (int i = 0; i < inBuf.length; i++) out[i] = inBuf[i].toDouble();
+    return out;
+  }
 
-    // frequencyも受け取る
-    waveformFft.onFrequencyDetected.listen((freq) {
+  void listener(dynamic obj) async {
+    final float32 = obj as Float32List;
+    final buffer = float32ToFloat64(float32);
+
+    final result = await pitchDetector.getPitchFromFloatBuffer(buffer);
+    if (result.pitched && result.pitch != null && result.pitch! > 0) {
+      final freq = result.pitch!;
+      final noteName = frequencyToNoteName(freq);
       setState(() {
-        frequency = freq ?? 0.0;
+        void listener(dynamic obj) async {
+          final float32 = obj as Float32List;
+          final buffer = float32ToFloat64(float32);
+
+          final result = await pitchDetector.getPitchFromFloatBuffer(buffer);
+          if (result.pitched && result.pitch != null && result.pitch! > 0) {
+            final freq = result.pitch!;
+            final noteName = frequencyToNoteName(freq);
+            setState(() {
+              frequency = freq;
+              currentNote = convertNoteToJapanese(noteName);
+              noteHistory.add(currentNote);
+              if (noteHistory.length > 10) noteHistory.removeAt(0);
+            });
+          }
+        }
+
+        frequency = freq;
+        currentNote = convertNoteToJapanese(noteName);
+        noteHistory.add(currentNote);
+        if (noteHistory.length > 10) noteHistory.removeAt(0);
       });
-    });
+    }
   }
 
-  void startListening() async {
-    await waveformFft.start();
-    setState(() {
-      isRecording = true;
-    });
+  void onError(Object e) {
+    debugPrint('Audio capture error: $e');
   }
 
-  void stopListening() async {
-    await waveformFft.stop();
-    setState(() {
-      isRecording = false;
-    });
+  Future<void> startListening() async {
+    await _audioCapture.start(listener, onError, bufferSize: bufferSize);
+    setState(() => isRecording = true);
+  }
+
+  Future<void> stopListening() async {
+    await _audioCapture.stop();
+    setState(() => isRecording = false);
+  }
+
+  String frequencyToNoteName(double freq) {
+    const A4 = 440.0;
+    const names = [
+      'C',
+      'C#',
+      'D',
+      'D#',
+      'E',
+      'F',
+      'F#',
+      'G',
+      'G#',
+      'A',
+      'A#',
+      'B',
+    ];
+    final semis = (12 * (log(freq / A4) / log(2))).round();
+    int idx = (semis + 9) % 12;
+    if (idx < 0) idx += 12;
+    final oct = 4 + ((semis + 9) ~/ 12);
+    return '${names[idx]}$oct';
   }
 
   String convertNoteToJapanese(String note) {
-    switch (note) {
+    final base = note.replaceAll(RegExp(r'\d'), '');
+    switch (base) {
       case 'C':
         return 'ド';
       case 'C#':
-        return 'ド#';
+        return 'ド♯';
       case 'D':
         return 'レ';
       case 'D#':
-        return 'レ#';
+        return 'レ♯';
       case 'E':
         return 'ミ';
       case 'F':
         return 'ファ';
       case 'F#':
-        return 'ファ#';
+        return 'ファ♯';
       case 'G':
         return 'ソ';
       case 'G#':
-        return 'ソ#';
+        return 'ソ♯';
       case 'A':
         return 'ラ';
       case 'A#':
-        return 'ラ#';
+        return 'ラ♯';
       case 'B':
         return 'シ';
       default:
@@ -109,44 +156,24 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('音階ビューア')),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          final isLargeScreen = constraints.maxWidth > 600;
-          final noteFontSize = isLargeScreen ? 100.0 : 80.0;
-          final freqFontSize = isLargeScreen ? 32.0 : 24.0;
-
-          return Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // 音階履歴
-                  NoteHistoryWidget(noteHistory: noteHistory),
-                  const SizedBox(height: 24),
-
-                  // 現在の音階
-                  CurrentNoteWidget(note: currentNote, fontSize: noteFontSize),
-
-                  const SizedBox(height: 16),
-
-                  // 周波数表示
-                  FrequencyWidget(frequency: frequency, fontSize: freqFontSize),
-
-                  const SizedBox(height: 40),
-
-                  // 操作ボタン
-                  ControlButtonsWidget(
-                    isRecording: isRecording,
-                    onStart: startListening,
-                    onStop: stopListening,
-                  ),
-                ],
-              ),
+      appBar: AppBar(title: const Text('絶対音感ビューア')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            NoteHistoryWidget(noteHistory: noteHistory),
+            const SizedBox(height: 24),
+            CurrentNoteWidget(note: currentNote, fontSize: 80),
+            const SizedBox(height: 16),
+            FrequencyWidget(frequency: frequency, fontSize: 24),
+            const SizedBox(height: 40),
+            ControlButtonsWidget(
+              onStart: isRecording ? null : startListening,
+              onStop: isRecording ? stopListening : null,
             ),
-          );
-        },
+          ],
+        ),
       ),
     );
   }
@@ -154,7 +181,6 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
 
 class NoteHistoryWidget extends StatelessWidget {
   final List<String> noteHistory;
-
   const NoteHistoryWidget({super.key, required this.noteHistory});
 
   @override
@@ -176,7 +202,6 @@ class NoteHistoryWidget extends StatelessWidget {
 class CurrentNoteWidget extends StatelessWidget {
   final String note;
   final double fontSize;
-
   const CurrentNoteWidget({
     super.key,
     required this.note,
@@ -195,7 +220,6 @@ class CurrentNoteWidget extends StatelessWidget {
 class FrequencyWidget extends StatelessWidget {
   final double frequency;
   final double fontSize;
-
   const FrequencyWidget({
     super.key,
     required this.frequency,
@@ -212,9 +236,8 @@ class FrequencyWidget extends StatelessWidget {
 }
 
 class ControlButtonsWidget extends StatelessWidget {
-  final VoidCallback onStart;
-  final VoidCallback onStop;
-
+  final VoidCallback? onStart;
+  final VoidCallback? onStop;
   const ControlButtonsWidget({
     super.key,
     required this.onStart,

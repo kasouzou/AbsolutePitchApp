@@ -89,14 +89,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.0.8"
-  equatable:
-    dependency: transitive
-    description:
-      name: equatable
-      sha256: "567c64b3cb4cf82397aac55f4f0cbd3ca20d77c6c03bedbc4ceaddc08904aef7"
-      url: "https://pub.dev"
-    source: hosted
-    version: "2.0.7"
   fake_async:
     dependency: transitive
     description:
@@ -113,29 +105,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.1.4"
-  fftea:
-    dependency: transitive
-    description:
-      name: fftea
-      sha256: fede501db039de9737d527a28b1f5ede8f68342f2c4e53459dfa372bd271ed6c
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.5.0+1"
-  fl_chart:
-    dependency: transitive
-    description:
-      name: fl_chart
-      sha256: "5276944c6ffc975ae796569a826c38a62d2abcf264e26b88fa6f482e107f4237"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.70.2"
   flutter:
     dependency: "direct main"
     description: flutter
     source: sdk
     version: "0.0.0"
   flutter_audio_capture:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: flutter_audio_capture
       sha256: "873fc96bd2e0033d0f14a41a79f7ed44ee52a32b319eab01a4192d8bb272431a"
@@ -251,6 +227,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "6.1.0"
+  pitch_detector_dart:
+    dependency: "direct main"
+    description:
+      name: pitch_detector_dart
+      sha256: "47b5dd1f1cd1fb6af553a9b920e271eba62b8a1b9e77fdfaa9421ae1dacb8a90"
+      url: "https://pub.dev"
+    source: hosted
+    version: "0.0.7"
   posix:
     dependency: transitive
     description:
@@ -336,14 +320,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "15.0.0"
-  waveform_fft:
-    dependency: "direct main"
-    description:
-      name: waveform_fft
-      sha256: "666cc077816866a81a6283bb2f71b7c6b707bc32b135f899d7fc1bd19677af02"
-      url: "https://pub.dev"
-    source: hosted
-    version: "0.0.3"
   xml:
     dependency: transitive
     description:
