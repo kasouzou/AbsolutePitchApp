@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_audio_capture/flutter_audio_capture.dart';
 import 'package:pitch_detector_dart/pitch_detector.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
   runApp(const AbsolutePitchApp());
 }
 
@@ -31,6 +34,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   late PitchDetector pitchDetector;
 
   bool isRecording = false;
+  bool isInitializing = false;
   String currentNote = '...';
   double frequency = 0.0;
   List<String> noteHistory = [];
@@ -51,36 +55,23 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   }
 
   void listener(dynamic obj) async {
-    final float32 = obj as Float32List;
-    final buffer = float32ToFloat64(float32);
+    try {
+      final float32 = obj as Float32List;
+      final buffer = float32ToFloat64(float32);
 
-    final result = await pitchDetector.getPitchFromFloatBuffer(buffer);
-    if (result.pitched && result.pitch != null && result.pitch! > 0) {
-      final freq = result.pitch!;
-      final noteName = frequencyToNoteName(freq);
-      setState(() {
-        void listener(dynamic obj) async {
-          final float32 = obj as Float32List;
-          final buffer = float32ToFloat64(float32);
-
-          final result = await pitchDetector.getPitchFromFloatBuffer(buffer);
-          if (result.pitched && result.pitch != null && result.pitch! > 0) {
-            final freq = result.pitch!;
-            final noteName = frequencyToNoteName(freq);
-            setState(() {
-              frequency = freq;
-              currentNote = convertNoteToJapanese(noteName);
-              noteHistory.add(currentNote);
-              if (noteHistory.length > 10) noteHistory.removeAt(0);
-            });
-          }
-        }
-
-        frequency = freq;
-        currentNote = convertNoteToJapanese(noteName);
-        noteHistory.add(currentNote);
-        if (noteHistory.length > 10) noteHistory.removeAt(0);
-      });
+      final result = await pitchDetector.getPitchFromFloatBuffer(buffer);
+      if (result.pitched && result.pitch != null && result.pitch! > 0) {
+        final freq = result.pitch!;
+        final noteName = frequencyToNoteName(freq);
+        setState(() {
+          frequency = freq;
+          currentNote = convertNoteToJapanese(noteName);
+          noteHistory.add(currentNote);
+          if (noteHistory.length > 10) noteHistory.removeAt(0);
+        });
+      }
+    } catch (e) {
+      // エラーは無視、音声入力中は断続的に出ることもある
     }
   }
 
@@ -88,14 +79,83 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     debugPrint('Audio capture error: $e');
   }
 
+  Future<bool> _requestPermission() async {
+    debugPrint('マイク権限を確認中...');
+    final status = await Permission.microphone.status;
+    if (status.isGranted) {
+      debugPrint('すでにマイク権限あり');
+      return true;
+    }
+    debugPrint('マイク権限なし、リクエスト開始');
+    final result = await Permission.microphone.request();
+    debugPrint('マイク権限リクエスト結果: ${result.isGranted}');
+    return result.isGranted;
+  }
+
   Future<void> startListening() async {
-    await _audioCapture.start(listener, onError, bufferSize: bufferSize);
-    setState(() => isRecording = true);
+    if (isRecording || isInitializing) {
+      debugPrint('すでに録音中または初期化中なのでstartListeningを中止');
+      return;
+    }
+
+    setState(() {
+      isInitializing = true;
+    });
+    debugPrint('startListening開始: 初期化中フラグON');
+
+    final hasPermission = await _requestPermission();
+    if (!hasPermission) {
+      debugPrint('マイクの権限が得られなかったので録音開始中止');
+      setState(() {
+        isInitializing = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('マイクの許可が必要です')));
+      return;
+    }
+
+    try {
+      debugPrint('audioCapture.start() を呼び出す直前');
+      await Future.delayed(const Duration(seconds: 1)); // ←ここで1秒待つ
+      await _audioCapture.start(
+        listener,
+        onError,
+        sampleRate: sampleRate,
+        bufferSize: bufferSize,
+      );
+      await Future.delayed(const Duration(milliseconds: 500)); // ←さらに少し待つ
+      debugPrint('audioCapture.start() 呼び出し成功');
+
+      // 少し待つ（すぐ録音状態にならない可能性があるため）
+      await Future.delayed(const Duration(milliseconds: 300));
+      setState(() {
+        isRecording = true;
+        isInitializing = false;
+      });
+      debugPrint('録音開始状態に切り替え完了');
+    } catch (e) {
+      debugPrint('録音開始例外発生: $e');
+      setState(() {
+        isRecording = false;
+        isInitializing = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('録音開始エラー: $e')));
+    }
   }
 
   Future<void> stopListening() async {
+    if (!isRecording) return;
     await _audioCapture.stop();
-    setState(() => isRecording = false);
+    setState(() {
+      isRecording = false;
+      isInitializing = false;
+      currentNote = '...';
+      frequency = 0.0;
+      noteHistory.clear();
+    });
   }
 
   String frequencyToNoteName(double freq) {
@@ -169,8 +229,10 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
             FrequencyWidget(frequency: frequency, fontSize: 24),
             const SizedBox(height: 40),
             ControlButtonsWidget(
-              onStart: isRecording ? null : startListening,
-              onStop: isRecording ? stopListening : null,
+              isInitializing: isInitializing,
+              isRecording: isRecording,
+              onStart: startListening,
+              onStop: stopListening,
             ),
           ],
         ),
@@ -236,10 +298,14 @@ class FrequencyWidget extends StatelessWidget {
 }
 
 class ControlButtonsWidget extends StatelessWidget {
+  final bool isInitializing;
+  final bool isRecording;
   final VoidCallback? onStart;
   final VoidCallback? onStop;
   const ControlButtonsWidget({
     super.key,
+    required this.isInitializing,
+    required this.isRecording,
     required this.onStart,
     required this.onStop,
   });
@@ -249,9 +315,15 @@ class ControlButtonsWidget extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        ElevatedButton(onPressed: onStart, child: const Text('録音開始')),
+        ElevatedButton(
+          onPressed: (isRecording || isInitializing) ? null : onStart,
+          child: isInitializing ? const Text('初期化中...') : const Text('録音開始'),
+        ),
         const SizedBox(width: 20),
-        ElevatedButton(onPressed: onStop, child: const Text('停止')),
+        ElevatedButton(
+          onPressed: isRecording ? onStop : null,
+          child: const Text('停止'),
+        ),
       ],
     );
   }
