@@ -30,11 +30,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  flutter_audio_capture: ^1.1.11
+  audio_streamer: ^4.2.2
   pitch_detector_dart: ^0.0.7
-  permission_handler: ^12.0.1
+  permission_handler: ^11.0.0
   # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
+  # Use with the CupertinoI4cons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
