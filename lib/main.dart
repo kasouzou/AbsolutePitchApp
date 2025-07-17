@@ -1,112 +1,244 @@
-import 'dart:math';
 import 'dart:async';
-
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:audio_streamer/audio_streamer.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:pitch_detector_dart/pitch_detector.dart';
 
-void main() => runApp(new AudioStreamingApp());
+void main() => runApp(const AbsolutePitchApp());
 
-class AudioStreamingApp extends StatefulWidget {
+class AbsolutePitchApp extends StatelessWidget {
+  const AbsolutePitchApp({super.key});
   @override
-  AudioStreamingAppState createState() => new AudioStreamingAppState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: '絶対音感ビューア',
+      theme: ThemeData(primarySwatch: Colors.indigo),
+      home: const AbsolutePitchViewer(),
+    );
+  }
 }
 
-class AudioStreamingAppState extends State<AudioStreamingApp> {
-  int? sampleRate;
+class AbsolutePitchViewer extends StatefulWidget {
+  const AbsolutePitchViewer({super.key});
+  @override
+  State<AbsolutePitchViewer> createState() => _AbsolutePitchViewerState();
+}
+
+class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
+  final AudioStreamer _audioStreamer = AudioStreamer();
+  final PitchDetector _pitchDetector = PitchDetector();
+
+  StreamSubscription<List<double>>? _audioSubscription;
   bool isRecording = false;
-  List<double> audio = [];
-  List<double>? latestBuffer;
-  double? recordingTime;
-  StreamSubscription<List<double>>? audioSubscription;
+  String currentNote = '...';
+  double frequency = 0.0;
+  List<String> noteHistory = [];
+  int? sampleRate;
 
-  /// Check if microphone permission is granted.
   Future<bool> checkPermission() async => await Permission.microphone.isGranted;
-
-  /// Request the microphone permission.
   Future<void> requestPermission() async =>
       await Permission.microphone.request();
 
-  /// Call-back on audio sample.
+  /// 音声バッファを受け取って処理
   void onAudio(List<double> buffer) async {
-    audio.addAll(buffer);
-
-    // Get the actual sampling rate, if not already known.
-    sampleRate ??= await AudioStreamer().actualSampleRate;
-    recordingTime = audio.length / sampleRate!;
-
-    setState(() => latestBuffer = buffer);
+    if (sampleRate == null) {
+      sampleRate = await _audioStreamer.actualSampleRate;
+    }
+    final result = await _pitchDetector.getPitchFromFloatBuffer(buffer);
+    if (result.pitched && result.pitch != null && result.pitch! > 0) {
+      final freq = result.pitch!;
+      final noteName = frequencyToNoteName(freq);
+      setState(() {
+        frequency = freq;
+        currentNote = convertNoteToJapanese(noteName);
+        noteHistory.add(currentNote);
+        if (noteHistory.length > 10) noteHistory.removeAt(0);
+      });
+    }
   }
 
-  /// Call-back on error.
+  /// エラーハンドリング
   void handleError(Object error) {
+    debugPrint('Error: $error');
     setState(() => isRecording = false);
-    print(error);
   }
 
-  /// Start audio sampling.
+  /// 録音開始
   void start() async {
-    // Check permission to use the microphone.
-    //
-    // Remember to update the AndroidManifest file (Android) and the
-    // Info.plist and pod files (iOS).
     if (!(await checkPermission())) {
       await requestPermission();
     }
-
-    // Set the sampling rate - works only on Android.
-    AudioStreamer().sampleRate = 22100;
-
-    // Start listening to the audio stream.
-    audioSubscription = AudioStreamer().audioStream.listen(
+    _audioStreamer.sampleRate = 44100; // Android用
+    _audioSubscription = _audioStreamer.audioStream.listen(
       onAudio,
       onError: handleError,
     );
-
     setState(() => isRecording = true);
   }
 
-  /// Stop audio sampling.
+  /// 録音停止
   void stop() async {
-    audioSubscription?.cancel();
+    await _audioSubscription?.cancel();
     setState(() => isRecording = false);
   }
 
+  /// 周波数→音階名
+  String frequencyToNoteName(double freq) {
+    const A4 = 440.0;
+    const names = [
+      'C',
+      'C#',
+      'D',
+      'D#',
+      'E',
+      'F',
+      'F#',
+      'G',
+      'G#',
+      'A',
+      'A#',
+      'B',
+    ];
+    final semis = (12 * (log(freq / A4) / log(2))).round();
+    int idx = (semis + 9) % 12;
+    if (idx < 0) idx += 12;
+    final oct = 4 + ((semis + 9) ~/ 12);
+    return '${names[idx]}$oct';
+  }
+
+  /// 音階名を日本語に変換
+  String convertNoteToJapanese(String note) {
+    final base = note.replaceAll(RegExp(r'\d'), '');
+    switch (base) {
+      case 'C':
+        return 'ド';
+      case 'C#':
+        return 'ド♯';
+      case 'D':
+        return 'レ';
+      case 'D#':
+        return 'レ♯';
+      case 'E':
+        return 'ミ';
+      case 'F':
+        return 'ファ';
+      case 'F#':
+        return 'ファ♯';
+      case 'G':
+        return 'ソ';
+      case 'G#':
+        return 'ソ♯';
+      case 'A':
+        return 'ラ';
+      case 'A#':
+        return 'ラ♯';
+      case 'B':
+        return 'シ';
+      default:
+        return note;
+    }
+  }
+
   @override
-  Widget build(BuildContext context) => MaterialApp(
-    home: Scaffold(
-      body: Center(
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('絶対音感ビューア')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            Container(
-              margin: EdgeInsets.all(25),
-              child: Column(
-                children: [
-                  Container(
-                    child: Text(
-                      isRecording ? "Mic: ON" : "Mic: OFF",
-                      style: TextStyle(fontSize: 25, color: Colors.blue),
-                    ),
-                    margin: EdgeInsets.only(top: 20),
-                  ),
-                  Text(''),
-                  Text('Max amp: ${latestBuffer?.reduce(max)}'),
-                  Text('Min amp: ${latestBuffer?.reduce(min)}'),
-                  Text(
-                    '${recordingTime?.toStringAsFixed(2)} seconds recorded.',
-                  ),
-                ],
-              ),
+          children: [
+            NoteHistoryWidget(noteHistory: noteHistory),
+            const SizedBox(height: 24),
+            CurrentNoteWidget(note: currentNote, fontSize: 80),
+            const SizedBox(height: 16),
+            FrequencyWidget(frequency: frequency, fontSize: 24),
+            const SizedBox(height: 40),
+            ControlButtonsWidget(
+              onStart: isRecording ? null : start,
+              onStop: isRecording ? stop : null,
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: isRecording ? Colors.red : Colors.green,
-        child: isRecording ? Icon(Icons.stop) : Icon(Icons.mic),
-        onPressed: isRecording ? stop : start,
+    );
+  }
+
+  @override
+  void dispose() {
+    _audioSubscription?.cancel();
+    super.dispose();
+  }
+}
+
+// 以下は表示用コンポーネント
+class NoteHistoryWidget extends StatelessWidget {
+  final List<String> noteHistory;
+  const NoteHistoryWidget({super.key, required this.noteHistory});
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: noteHistory.map((note) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8.0),
+            child: Text(note, style: const TextStyle(fontSize: 24)),
+          );
+        }).toList(),
       ),
-    ),
-  );
+    );
+  }
+}
+
+class CurrentNoteWidget extends StatelessWidget {
+  final String note;
+  final double fontSize;
+  const CurrentNoteWidget({
+    super.key,
+    required this.note,
+    required this.fontSize,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      note,
+      style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold),
+    );
+  }
+}
+
+class FrequencyWidget extends StatelessWidget {
+  final double frequency;
+  final double fontSize;
+  const FrequencyWidget({
+    super.key,
+    required this.frequency,
+    required this.fontSize,
+  });
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      '${frequency.toStringAsFixed(1)} Hz',
+      style: TextStyle(fontSize: fontSize, color: Colors.grey[700]),
+    );
+  }
+}
+
+class ControlButtonsWidget extends StatelessWidget {
+  final VoidCallback? onStart;
+  final VoidCallback? onStop;
+  const ControlButtonsWidget({super.key, this.onStart, this.onStop});
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ElevatedButton(onPressed: onStart, child: const Text('録音開始')),
+        const SizedBox(width: 20),
+        ElevatedButton(onPressed: onStop, child: const Text('停止')),
+      ],
+    );
+  }
 }
