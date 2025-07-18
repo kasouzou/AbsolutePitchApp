@@ -83,6 +83,14 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     setState(() => isRecording = false);
   }
 
+  void reset() {
+    setState(() {
+      noteHistory.clear();
+      currentNote = '...';
+      frequency = 0.0;
+    });
+  }
+
   /// 周波数→音階名
   String frequencyToNoteName(double freq) {
     const A4 = 440.0;
@@ -158,6 +166,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
             ControlButtonsWidget(
               onStart: isRecording ? null : start,
               onStop: isRecording ? stop : null,
+              onReset: reset,
             ),
           ],
         ),
@@ -229,7 +238,14 @@ class FrequencyWidget extends StatelessWidget {
 class ControlButtonsWidget extends StatelessWidget {
   final VoidCallback? onStart;
   final VoidCallback? onStop;
-  const ControlButtonsWidget({super.key, this.onStart, this.onStop});
+  final VoidCallback? onReset;
+
+  const ControlButtonsWidget({
+    super.key,
+    this.onStart,
+    this.onStop,
+    this.onReset,
+  });
   @override
   Widget build(BuildContext context) {
     return Row(
@@ -238,6 +254,8 @@ class ControlButtonsWidget extends StatelessWidget {
         ElevatedButton(onPressed: onStart, child: const Text('録音開始')),
         const SizedBox(width: 20),
         ElevatedButton(onPressed: onStop, child: const Text('停止')),
+        const SizedBox(width: 20),
+        ElevatedButton(onPressed: onReset, child: const Text('リセット')),
       ],
     );
   }
