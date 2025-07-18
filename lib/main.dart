@@ -12,6 +12,7 @@ class AbsolutePitchApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      debugShowCheckedModeBanner: false,
       title: '絶対音感ビューア',
       theme: ThemeData(primarySwatch: Colors.indigo),
       home: const AbsolutePitchViewer(),
