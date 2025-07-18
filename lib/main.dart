@@ -172,37 +172,47 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          child: SingleChildScrollView(
-            // コンテンツが画面に収まらない場合にスクロール可能にする
-            child: (orientation == Orientation.portrait)
-                ? Column(
-                    // 縦向きのレイアウト
-                    mainAxisAlignment: MainAxisAlignment.center, // 縦方向に中央寄せ
-                    children: [
-                      NoteHistoryWidget(
-                        noteHistory: noteHistory,
-                        fontSize: noteHistoryFontSize,
+          // 画面の向きによってレイアウトを切り替える
+          child: (orientation == Orientation.portrait)
+              ? SizedBox.expand(
+                  // 縦画面の場合、利用可能なスペース全体に広がる
+                  child: Align(
+                    // その中でコンテンツを中央に配置
+                    alignment: Alignment.center,
+                    child: SingleChildScrollView(
+                      // コンテンツが多すぎたらスクロール
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center, // 縦方向に中央寄せ
+                        mainAxisSize: MainAxisSize.min, // コンテンツサイズに合わせる
+                        children: [
+                          NoteHistoryWidget(
+                            noteHistory: noteHistory,
+                            fontSize: noteHistoryFontSize,
+                          ),
+                          const SizedBox(height: 24),
+                          CurrentNoteWidget(
+                            note: currentNote,
+                            fontSize: currentNoteFontSize,
+                          ),
+                          const SizedBox(height: 16),
+                          FrequencyWidget(
+                            frequency: frequency,
+                            fontSize: frequencyFontSize,
+                          ),
+                          const SizedBox(height: 40),
+                          ControlButtonsWidget(
+                            onStart: isRecording ? null : start,
+                            onStop: isRecording ? stop : null,
+                            onReset: reset,
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 24),
-                      CurrentNoteWidget(
-                        note: currentNote,
-                        fontSize: currentNoteFontSize,
-                      ),
-                      const SizedBox(height: 16),
-                      FrequencyWidget(
-                        frequency: frequency,
-                        fontSize: frequencyFontSize,
-                      ),
-                      const SizedBox(height: 40),
-                      ControlButtonsWidget(
-                        onStart: isRecording ? null : start, // 録音中は開始ボタンを無効化
-                        onStop: isRecording ? stop : null, // 録音中でなければ停止ボタンを無効化
-                        onReset: reset,
-                      ),
-                    ],
-                  )
-                : Row(
-                    // 横向きのレイアウト
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
+                  // 横向きのレイアウトは変わらず
+                  child: Row(
                     mainAxisAlignment:
                         MainAxisAlignment.spaceEvenly, // 要素を均等に配置
                     crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央寄せ
@@ -250,7 +260,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
                       ),
                     ],
                   ),
-          ),
+                ),
         ),
       ),
     );
@@ -338,8 +348,7 @@ class ControlButtonsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Row の代わりに Wrap を使うことで、画面幅が足りないときに自動で折り返してくれる
-    // これにより、「RIGHT OVERFLOWED」エラーを解消し、より柔軟なレイアウトを実現
+    // Wrap を使うことで、画面幅が足りないときに自動で折り返してくれる
     return Wrap(
       spacing: 20.0, // ボタン間の水平方向のスペース
       runSpacing: 10.0, // 折り返した際の垂直方向のスペース
