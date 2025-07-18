@@ -40,7 +40,6 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   Future<void> requestPermission() async =>
       await Permission.microphone.request();
 
-  /// 音声バッファを受け取って処理
   void onAudio(List<double> buffer) async {
     if (sampleRate == null) {
       sampleRate = await _audioStreamer.actualSampleRate;
@@ -58,18 +57,16 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     }
   }
 
-  /// エラーハンドリング
   void handleError(Object error) {
     debugPrint('Error: $error');
     setState(() => isRecording = false);
   }
 
-  /// 録音開始
   void start() async {
     if (!(await checkPermission())) {
       await requestPermission();
     }
-    _audioStreamer.sampleRate = 44100; // Android用
+    _audioStreamer.sampleRate = 44100;
     _audioSubscription = _audioStreamer.audioStream.listen(
       onAudio,
       onError: handleError,
@@ -77,7 +74,6 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     setState(() => isRecording = true);
   }
 
-  /// 録音停止
   void stop() async {
     await _audioSubscription?.cancel();
     setState(() => isRecording = false);
@@ -91,7 +87,6 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     });
   }
 
-  /// 周波数→音階名
   String frequencyToNoteName(double freq) {
     const A4 = 440.0;
     const names = [
@@ -115,7 +110,6 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     return '${names[idx]}$oct';
   }
 
-  /// 音階名を日本語に変換
   String convertNoteToJapanese(String note) {
     final base = note.replaceAll(RegExp(r'\d'), '');
     switch (base) {
@@ -152,23 +146,27 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('絶対音感ビューア')),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            NoteHistoryWidget(noteHistory: noteHistory),
-            const SizedBox(height: 24),
-            CurrentNoteWidget(note: currentNote, fontSize: 80),
-            const SizedBox(height: 16),
-            FrequencyWidget(frequency: frequency, fontSize: 24),
-            const SizedBox(height: 40),
-            ControlButtonsWidget(
-              onStart: isRecording ? null : start,
-              onStop: isRecording ? stop : null,
-              onReset: reset,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                NoteHistoryWidget(noteHistory: noteHistory),
+                const SizedBox(height: 24),
+                CurrentNoteWidget(note: currentNote, fontSize: 80),
+                const SizedBox(height: 16),
+                FrequencyWidget(frequency: frequency, fontSize: 24),
+                const SizedBox(height: 40),
+                ControlButtonsWidget(
+                  onStart: isRecording ? null : start,
+                  onStop: isRecording ? stop : null,
+                  onReset: reset,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -181,7 +179,6 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   }
 }
 
-// 以下は表示用コンポーネント
 class NoteHistoryWidget extends StatelessWidget {
   final List<String> noteHistory;
   const NoteHistoryWidget({super.key, required this.noteHistory});
@@ -246,6 +243,7 @@ class ControlButtonsWidget extends StatelessWidget {
     this.onStop,
     this.onReset,
   });
+
   @override
   Widget build(BuildContext context) {
     return Row(
