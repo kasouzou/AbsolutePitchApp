@@ -3,9 +3,55 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:audio_streamer/audio_streamer.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:isolate';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 
 void main() => runApp(const AbsolutePitchApp());
+
+// isolate 側のエントリポイント
+void pitchDetectIsolate(SendPort mainSendPort) {
+  // isolate 内で受信待ち用のポートを作成
+  final port = ReceivePort();
+
+  // メイン側に自分のSendPortを教える
+  mainSendPort.send(port.sendPort);
+
+  // メッセージを待ち受け
+  port.listen((message) async {
+    // メッセージは [buffer, replyPort]
+    final List<double> buffer = message[0];
+    final SendPort replyPort = message[1];
+
+    // isolate 内で PitchDetector を使って解析
+    final detector = PitchDetector();
+    final result = await detector.getPitchFromFloatBuffer(buffer);
+
+    // メインスレッドに結果を返す
+    replyPort.send(result);
+  });
+}
+
+Future<dynamic> detectPitchInIsolate(List<double> buffer) async {
+  // isolate の起動に必要な ReceivePort
+  final receivePort = ReceivePort();
+
+  // isolate 起動
+  await Isolate.spawn(pitchDetectIsolate, receivePort.sendPort);
+
+  // isolate 側から送られてくる SendPort を待つ
+  final SendPort isolateSendPort = await receivePort.first;
+
+  // 結果受信用のポート
+  final responsePort = ReceivePort();
+
+  // isolate にデータと返信先を送信
+  isolateSendPort.send([buffer, responsePort.sendPort]);
+
+  // 結果を受信して返す
+  final result = await responsePort.first;
+
+  return result;
+}
 
 class AbsolutePitchApp extends StatelessWidget {
   const AbsolutePitchApp({super.key});
@@ -45,7 +91,11 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     if (sampleRate == null) {
       sampleRate = await _audioStreamer.actualSampleRate;
     }
-    final result = await _pitchDetector.getPitchFromFloatBuffer(buffer);
+
+    // isolate を使って解析
+    final result = await detectPitchInIsolate(buffer);
+
+    // final result = await _pitchDetector.getPitchFromFloatBuffer(buffer);
     if (result.pitched && result.pitch != null && result.pitch! > 0) {
       final freq = result.pitch!;
       final noteName = frequencyToNoteName(freq);
