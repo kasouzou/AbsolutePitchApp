@@ -92,18 +92,23 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
       sampleRate = await _audioStreamer.actualSampleRate;
     }
 
-    // isolate を使って解析
+    // isolate を使って解析(別スレッド=メインスレッドでない←厳密な説明!!)
     final result = await detectPitchInIsolate(buffer);
 
-    // final result = await _pitchDetector.getPitchFromFloatBuffer(buffer);
     if (result.pitched && result.pitch != null && result.pitch! > 0) {
       final freq = result.pitch!;
       final noteName = frequencyToNoteName(freq);
+      final newNote = convertNoteToJapanese(noteName);
+
       setState(() {
         frequency = freq;
-        currentNote = convertNoteToJapanese(noteName);
-        noteHistory.add(currentNote);
-        if (noteHistory.length > 10) noteHistory.removeAt(0); // 最新10件を保持
+        currentNote = newNote;
+
+        // 音階が変わったときだけ履歴に追加
+        if (noteHistory.isEmpty || noteHistory.last != newNote) {
+          noteHistory.add(newNote);
+          if (noteHistory.length > 10) noteHistory.removeAt(0); // 最新10件を保持
+        }
       });
     }
   }
