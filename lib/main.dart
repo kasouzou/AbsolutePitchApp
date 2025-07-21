@@ -1,13 +1,18 @@
 import 'dart:async';
-import 'dart:math';
+import 'dart:math'; // log関数を使うためにインポート
 import 'package:flutter/material.dart';
 import 'package:audio_streamer/audio_streamer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:isolate';
 import 'package:pitch_detector_dart/pitch_detector.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart'; // ★追加: AdMobパッケージをインポート
 
-void main() => runApp(const AbsolutePitchApp());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  MobileAds.instance.initialize(); // ★追加: AdMob SDKを初期化
+  runApp(const AbsolutePitchApp());
+}
 
 // isolate 側のエントリポイント
 void pitchDetectIsolate(SendPort mainSendPort) {
@@ -53,7 +58,8 @@ class AbsolutePitchViewer extends StatefulWidget {
 
 class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   final AudioStreamer _audioStreamer = AudioStreamer();
-  final PitchDetector _pitchDetector = PitchDetector();
+  final PitchDetector _pitchDetector =
+      PitchDetector(); // このインスタンスはIsolate内で使われるため、直接は使わないかも
   final AudioPlayer _audioPlayer = AudioPlayer();
 
   StreamSubscription<List<double>>? _audioSubscription;
@@ -65,6 +71,44 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
 
   String? _lastPlayedNoteFile; // 直前に鳴らしたファイル名を保持して再生重複防止
 
+  // ★追加: バナー広告関連
+  BannerAd? _bannerAd;
+  bool _isBannerAdLoaded = false;
+  // TODO: テスト用の広告ユニットID。本番用IDに置き換えるのを忘れないでね！
+  // Android: ca-app-pub-3940256099942544/6300978111 (テスト用バナー)
+  // iOS: ca-app-pub-3940256099942544/2934735716 (テスト用バナー)
+  final String _adUnitId = 'ca-app-pub-3940256099942544/9214589741';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBannerAd(); // ★追加: バナー広告をロードする
+  }
+
+  // ★追加: バナー広告をロードするメソッド
+  void _loadBannerAd() {
+    _bannerAd = BannerAd(
+      adUnitId: _adUnitId,
+      request: const AdRequest(),
+      size: AdSize
+          .banner, // Adaptive Bannerを使うならAdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSizeを使うけど、とりあえずbannerでOK
+      listener: BannerAdListener(
+        onAdLoaded: (ad) {
+          debugPrint('バナー広告がロードされました。');
+          setState(() {
+            _isBannerAdLoaded = true;
+          });
+        },
+        onAdFailedToLoad: (ad, err) {
+          debugPrint('バナー広告のロードに失敗しました: $err');
+          ad.dispose();
+        },
+        onAdOpened: (ad) => debugPrint('バナー広告が開かれました。'),
+        onAdClosed: (ad) => debugPrint('バナー広告が閉じられました。'),
+      ),
+    )..load();
+  }
+
   Future<bool> checkPermission() async => await Permission.microphone.isGranted;
   Future<void> requestPermission() async =>
       await Permission.microphone.request();
@@ -73,6 +117,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     if (sampleRate == null) {
       sampleRate = await _audioStreamer.actualSampleRate;
     }
+    // PitchDetectorインスタンスを直接使わず、Isolate経由で呼び出す
     final result = await detectPitchInIsolate(buffer);
 
     if (result.pitched && result.pitch != null && result.pitch! > 0) {
@@ -218,88 +263,123 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('絶対音感ビューア')),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: (orientation == Orientation.portrait)
-              ? SizedBox.expand(
-                  child: Align(
-                    alignment: Alignment.center,
-                    child: SingleChildScrollView(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          NoteHistoryWidget(
-                            noteHistory: noteHistory,
-                            fontSize: noteHistoryFontSize,
+      // ★ここからbodyの構成を大きく変更するよ！
+      body: Stack(
+        // ここをStackに変更
+        children: [
+          // メインコンテンツ（Stackの一番下に配置）
+          Positioned.fill(
+            // 親Widgetいっぱいに広がる
+            child: SafeArea(
+              // SafeAreaは引き続き残す
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: (orientation == Orientation.portrait)
+                    ? SizedBox.expand(
+                        // 縦向きの場合
+                        child: Align(
+                          alignment: Alignment.center,
+                          child: SingleChildScrollView(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                NoteHistoryWidget(
+                                  noteHistory: noteHistory,
+                                  fontSize: noteHistoryFontSize,
+                                ),
+                                const SizedBox(height: 24),
+                                CurrentNoteWidget(
+                                  note: currentNote,
+                                  fontSize: currentNoteFontSize,
+                                ),
+                                const SizedBox(height: 16),
+                                FrequencyWidget(
+                                  frequency: frequency,
+                                  fontSize: frequencyFontSize,
+                                ),
+                                const SizedBox(height: 40),
+                                ControlButtonsWidget(
+                                  onStart: isRecording ? null : start,
+                                  onStop: isRecording ? stop : null,
+                                  onReset: reset,
+                                ),
+                                // バナー広告はStackのPositionedで管理するので、ここから削除
+                                // 広告分の余白が必要であれば、ここにもSizedBoxを追加
+                                const SizedBox(
+                                  height: 60,
+                                ), // バナー広告分のスペースを確保 (バナーサイズに合わせて調整)
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 24),
-                          CurrentNoteWidget(
-                            note: currentNote,
-                            fontSize: currentNoteFontSize,
-                          ),
-                          const SizedBox(height: 16),
-                          FrequencyWidget(
-                            frequency: frequency,
-                            fontSize: frequencyFontSize,
-                          ),
-                          const SizedBox(height: 40),
-                          ControlButtonsWidget(
-                            onStart: isRecording ? null : start,
-                            onStop: isRecording ? stop : null,
-                            onReset: reset,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                )
-              : SingleChildScrollView(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        ),
+                      )
+                    : SingleChildScrollView(
+                        // 横向きの場合
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            NoteHistoryWidget(
-                              noteHistory: noteHistory,
-                              fontSize: noteHistoryFontSize,
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  NoteHistoryWidget(
+                                    noteHistory: noteHistory,
+                                    fontSize: noteHistoryFontSize,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  CurrentNoteWidget(
+                                    note: currentNote,
+                                    fontSize: currentNoteFontSize,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  FrequencyWidget(
+                                    frequency: frequency,
+                                    fontSize: frequencyFontSize,
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(height: 16),
-                            CurrentNoteWidget(
-                              note: currentNote,
-                              fontSize: currentNoteFontSize,
-                            ),
-                            const SizedBox(height: 8),
-                            FrequencyWidget(
-                              frequency: frequency,
-                              fontSize: frequencyFontSize,
+                            const SizedBox(width: 24),
+                            Expanded(
+                              flex: 1,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  ControlButtonsWidget(
+                                    onStart: isRecording ? null : start,
+                                    onStop: isRecording ? stop : null,
+                                    onReset: reset,
+                                  ),
+                                  // バナー広告はStackのPositionedで管理するので、ここから削除
+                                  // 広告分の余白が必要であれば、ここにもSizedBoxを追加
+                                  const SizedBox(
+                                    height: 60,
+                                  ), // バナー広告分のスペースを確保 (バナーサイズに合わせて調整)
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 24),
-                      Expanded(
-                        flex: 1,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ControlButtonsWidget(
-                              onStart: isRecording ? null : start,
-                              onStop: isRecording ? stop : null,
-                              onReset: reset,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-        ),
+              ),
+            ),
+          ),
+          // バナー広告（Stackの一番上、最下部に固定）
+          if (_bannerAd != null && _isBannerAdLoaded)
+            Positioned(
+              bottom: 0, // 画面の最下部に固定
+              left: 0,
+              right: 0,
+              child: SizedBox(
+                width: _bannerAd!.size.width.toDouble(),
+                height: _bannerAd!.size.height.toDouble(),
+                child: AdWidget(ad: _bannerAd!),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -308,6 +388,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   void dispose() {
     _audioSubscription?.cancel();
     _audioPlayer.dispose();
+    _bannerAd?.dispose(); // ★追加: バナー広告を破棄
     super.dispose();
   }
 }
@@ -391,7 +472,7 @@ class ControlButtonsWidget extends StatelessWidget {
       runSpacing: 10.0,
       alignment: WrapAlignment.center,
       children: [
-        ElevatedButton(onPressed: onStart, child: const Text('録音開始')),
+        ElevatedButton(onPressed: onStart, child: const Text('解析開始')),
         ElevatedButton(onPressed: onStop, child: const Text('停止')),
         ElevatedButton(onPressed: onReset, child: const Text('リセット')),
       ],

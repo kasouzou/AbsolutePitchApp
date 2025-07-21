@@ -34,6 +34,7 @@ dependencies:
   pitch_detector_dart: ^0.0.7
   permission_handler: ^11.0.0
   audioplayers: ^6.5.0
+  google_mobile_ads: ^6.0.0
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoI4cons class for iOS style icons.
   cupertino_icons: ^1.0.8
