@@ -5,51 +5,30 @@ import 'package:audio_streamer/audio_streamer.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:isolate';
 import 'package:pitch_detector_dart/pitch_detector.dart';
+import 'package:audioplayers/audioplayers.dart';
 
 void main() => runApp(const AbsolutePitchApp());
 
 // isolate 側のエントリポイント
 void pitchDetectIsolate(SendPort mainSendPort) {
-  // isolate 内で受信待ち用のポートを作成
   final port = ReceivePort();
-
-  // メイン側に自分のSendPortを教える
   mainSendPort.send(port.sendPort);
-
-  // メッセージを待ち受け
   port.listen((message) async {
-    // メッセージは [buffer, replyPort]
     final List<double> buffer = message[0];
     final SendPort replyPort = message[1];
-
-    // isolate 内で PitchDetector を使って解析
     final detector = PitchDetector();
     final result = await detector.getPitchFromFloatBuffer(buffer);
-
-    // メインスレッドに結果を返す
     replyPort.send(result);
   });
 }
 
 Future<dynamic> detectPitchInIsolate(List<double> buffer) async {
-  // isolate の起動に必要な ReceivePort
   final receivePort = ReceivePort();
-
-  // isolate 起動
   await Isolate.spawn(pitchDetectIsolate, receivePort.sendPort);
-
-  // isolate 側から送られてくる SendPort を待つ
   final SendPort isolateSendPort = await receivePort.first;
-
-  // 結果受信用のポート
   final responsePort = ReceivePort();
-
-  // isolate にデータと返信先を送信
   isolateSendPort.send([buffer, responsePort.sendPort]);
-
-  // 結果を受信して返す
   final result = await responsePort.first;
-
   return result;
 }
 
@@ -75,6 +54,7 @@ class AbsolutePitchViewer extends StatefulWidget {
 class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   final AudioStreamer _audioStreamer = AudioStreamer();
   final PitchDetector _pitchDetector = PitchDetector();
+  final AudioPlayer _audioPlayer = AudioPlayer();
 
   StreamSubscription<List<double>>? _audioSubscription;
   bool isRecording = false;
@@ -82,6 +62,8 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   double frequency = 0.0;
   List<String> noteHistory = [];
   int? sampleRate;
+
+  String? _lastPlayedNoteFile; // 直前に鳴らしたファイル名を保持して再生重複防止
 
   Future<bool> checkPermission() async => await Permission.microphone.isGranted;
   Future<void> requestPermission() async =>
@@ -91,25 +73,39 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     if (sampleRate == null) {
       sampleRate = await _audioStreamer.actualSampleRate;
     }
-
-    // isolate を使って解析(別スレッド=メインスレッドでない←厳密な説明!!)
     final result = await detectPitchInIsolate(buffer);
 
     if (result.pitched && result.pitch != null && result.pitch! > 0) {
       final freq = result.pitch!;
-      final noteName = frequencyToNoteName(freq);
-      final newNote = convertNoteToJapanese(noteName);
+      final noteName = frequencyToNoteName(freq); // 例: "C4"
+      final newNote = convertNoteToJapanese(noteName); // 例: "ド"
+
+      // 再生用ファイル名は音名（半音つき）＋オクターブ＋拡張子
+      final safeNoteName = noteName.replaceAll('#', 's');
+      final audioFileName = '$safeNoteName.m4a';
 
       setState(() {
         frequency = freq;
         currentNote = newNote;
 
-        // 音階が変わったときだけ履歴に追加
         if (noteHistory.isEmpty || noteHistory.last != newNote) {
           noteHistory.add(newNote);
-          if (noteHistory.length > 10) noteHistory.removeAt(0); // 最新10件を保持
+          if (noteHistory.length > 10) noteHistory.removeAt(0);
         }
       });
+
+      // 音が変わったときだけ音を鳴らす
+      if (_lastPlayedNoteFile != audioFileName) {
+        _lastPlayedNoteFile = audioFileName;
+        // いったん停止してから再生（連続再生での重なり防止）
+        await _audioPlayer.stop();
+        try {
+          await _audioPlayer.play(AssetSource('sounds/$audioFileName'));
+        } catch (e) {
+          // ファイルがない場合などの例外は無視
+          debugPrint('Audio play error: $e');
+        }
+      }
     }
   }
 
@@ -122,7 +118,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
     if (!(await checkPermission())) {
       await requestPermission();
     }
-    _audioStreamer.sampleRate = 44100; // サンプルレートを設定
+    _audioStreamer.sampleRate = 44100;
     _audioSubscription = _audioStreamer.audioStream.listen(
       onAudio,
       onError: handleError,
@@ -132,7 +128,11 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
 
   void stop() async {
     await _audioSubscription?.cancel();
-    setState(() => isRecording = false);
+    await _audioPlayer.stop();
+    setState(() {
+      isRecording = false;
+      _lastPlayedNoteFile = null;
+    });
   }
 
   void reset() {
@@ -140,6 +140,7 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
       noteHistory.clear();
       currentNote = '...';
       frequency = 0.0;
+      _lastPlayedNoteFile = null;
     });
   }
 
@@ -159,18 +160,15 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
       'A#',
       'B',
     ];
-    // 音の周波数から半音数を計算
     final semis = (12 * (log(freq / A4) / log(2))).round();
-    // 半音数から音名インデックスを計算
-    int idx = (semis + 9) % 12; // Cを0とするインデックス
-    if (idx < 0) idx += 12; // 負の値にならないように調整
-    // オクターブを計算
+    int idx = (semis + 9) % 12;
+    if (idx < 0) idx += 12;
     final oct = 4 + ((semis + 9) ~/ 12);
     return '${names[idx]}$oct';
   }
 
   String convertNoteToJapanese(String note) {
-    final base = note.replaceAll(RegExp(r'\d'), ''); // オクターブ部分を削除
+    final base = note.replaceAll(RegExp(r'\d'), '');
     switch (base) {
       case 'C':
         return 'ド';
@@ -197,28 +195,23 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
       case 'B':
         return 'シ';
       default:
-        return note; // マッチしない場合はそのまま返す
+        return note;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // 画面の高さと幅、向きを取得
     final screenHeight = MediaQuery.of(context).size.height;
     final screenWidth = MediaQuery.of(context).size.width;
     final orientation = MediaQuery.of(context).orientation;
 
-    // 画面の向きによってフォントサイズを動的に計算
     final currentNoteFontSize = (orientation == Orientation.portrait)
-        ? screenHeight *
-              0.1 // 縦向きの場合
-        : screenWidth * 0.08; // 横向きの場合（画面幅に対して小さめに調整）
+        ? screenHeight * 0.1
+        : screenWidth * 0.08;
     final frequencyFontSize = (orientation == Orientation.portrait)
-        ? screenHeight *
-              0.04 // 縦向きの場合
-        : screenWidth * 0.03; // 横向きの場合（画面幅に対して小さめに調整）
+        ? screenHeight * 0.04
+        : screenWidth * 0.03;
 
-    // 横向きの場合は、NoteHistoryWidgetのフォントサイズも少し小さくして、他の情報とのバランスをとる
     final noteHistoryFontSize = (orientation == Orientation.portrait)
         ? 24.0
         : 20.0;
@@ -228,18 +221,14 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),
-          // 画面の向きによってレイアウトを切り替える
           child: (orientation == Orientation.portrait)
               ? SizedBox.expand(
-                  // 縦画面の場合、利用可能なスペース全体に広がる
                   child: Align(
-                    // その中でコンテンツを中央に配置
                     alignment: Alignment.center,
                     child: SingleChildScrollView(
-                      // コンテンツが多すぎたらスクロール
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center, // 縦方向に中央寄せ
-                        mainAxisSize: MainAxisSize.min, // コンテンツサイズに合わせる
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           NoteHistoryWidget(
                             noteHistory: noteHistory,
@@ -267,19 +256,14 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
                   ),
                 )
               : SingleChildScrollView(
-                  // 横向きのレイアウトは変わらず
                   child: Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.spaceEvenly, // 要素を均等に配置
-                    crossAxisAlignment: CrossAxisAlignment.center, // 垂直方向の中央寄せ
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      // 左側の情報（履歴と現在の音）
                       Expanded(
-                        // 使えるスペースを最大限に使う
-                        flex: 2, // 左右の比率を調整できる（例: 左が右の2倍の幅）
+                        flex: 2,
                         child: Column(
-                          mainAxisAlignment:
-                              MainAxisAlignment.center, // 縦方向に中央寄せ
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             NoteHistoryWidget(
                               noteHistory: noteHistory,
@@ -298,13 +282,11 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
                           ],
                         ),
                       ),
-                      const SizedBox(width: 24), // 左右のセクションの間にスペース
-                      // 右側のコントロールボタン
+                      const SizedBox(width: 24),
                       Expanded(
-                        flex: 1, // ボタンセクションは左側より小さくする
+                        flex: 1,
                         child: Column(
-                          mainAxisAlignment:
-                              MainAxisAlignment.center, // ボタンを縦方向に中央寄せ
+                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             ControlButtonsWidget(
                               onStart: isRecording ? null : start,
@@ -324,33 +306,33 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
 
   @override
   void dispose() {
-    _audioSubscription?.cancel(); // ウィジェットが破棄されるときに購読をキャンセル
+    _audioSubscription?.cancel();
+    _audioPlayer.dispose();
     super.dispose();
   }
 }
 
 class NoteHistoryWidget extends StatelessWidget {
   final List<String> noteHistory;
-  final double fontSize; // フォントサイズを受け取るように変更
+  final double fontSize;
   const NoteHistoryWidget({
     super.key,
     required this.noteHistory,
     this.fontSize = 24.0,
-  }); // デフォルト値を設定
+  });
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      scrollDirection: Axis.horizontal, // 横方向にスクロール可能
+      scrollDirection: Axis.horizontal,
       child: Row(
-        children: noteHistory.map((note) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Text(
-              note,
-              style: TextStyle(fontSize: fontSize),
-            ), // 受け取ったフォントサイズを使用
-          );
-        }).toList(),
+        children: noteHistory
+            .map(
+              (note) => Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text(note, style: TextStyle(fontSize: fontSize)),
+              ),
+            )
+            .toList(),
       ),
     );
   }
@@ -384,7 +366,7 @@ class FrequencyWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Text(
-      '${frequency.toStringAsFixed(1)} Hz', // 周波数を小数点以下1桁で表示
+      '${frequency.toStringAsFixed(1)} Hz',
       style: TextStyle(fontSize: fontSize, color: Colors.grey[700]),
     );
   }
@@ -404,11 +386,10 @@ class ControlButtonsWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Wrap を使うことで、画面幅が足りないときに自動で折り返してくれる
     return Wrap(
-      spacing: 20.0, // ボタン間の水平方向のスペース
-      runSpacing: 10.0, // 折り返した際の垂直方向のスペース
-      alignment: WrapAlignment.center, // ボタンを中央に寄せる
+      spacing: 20.0,
+      runSpacing: 10.0,
+      alignment: WrapAlignment.center,
       children: [
         ElevatedButton(onPressed: onStart, child: const Text('録音開始')),
         ElevatedButton(onPressed: onStop, child: const Text('停止')),
