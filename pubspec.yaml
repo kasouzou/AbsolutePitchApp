@@ -16,8 +16,9 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
-
+version: 1.0.0+1 
+# version: [versionName]+[versionCode]という構成になっていて、ここだと、versionnameが 1.0.0で、versionCodeが１です。これらはbuild.gradleのversionCode = flutter.versionCode　versionName = flutter.versionNameにビルド時にそれぞれ代入されます。
+ 
 environment:
   sdk: ^3.8.1
 
@@ -30,21 +31,20 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  audio_streamer: ^4.2.2
+  audio_streamer: ^4.2.2 
   pitch_detector_dart: ^0.0.7
   permission_handler: ^11.0.0
   audioplayers: ^6.5.0
   google_mobile_ads: ^6.0.0
+  
+
   # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoI4cons class for iOS style icons.
+  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
-  flutter_launcher_icons: ^0.14.4
+  flutter_launcher_icons: ^0.14.4 
   
-
-
-
   flutter_test:
     sdk: flutter
 
@@ -54,18 +54,17 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^5.0.0
-
-
-flutter_launcher_icons:
-  android: true
-  ios: true
-  image_path: "assets/icon/pitch_viewer.png"  # 自分が用意したアイコン画像
-
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
 # The following section is specific to Flutter packages.
 flutter:
+
+  # ここにflutter_iconsの設定を移動させます！
+flutter_launcher_icons: # ここも修正します
+  android: true
+  ios: true
+  image_path: "assets/icon/pitch_viewer.png" 
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
@@ -105,4 +104,3 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
-

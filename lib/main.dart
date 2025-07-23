@@ -77,7 +77,8 @@ class _AbsolutePitchViewerState extends State<AbsolutePitchViewer> {
   // TODO: テスト用の広告ユニットID。本番用IDに置き換えるのを忘れないでね！
   // Android: ca-app-pub-3940256099942544/6300978111 (テスト用バナー)
   // iOS: ca-app-pub-3940256099942544/2934735716 (テスト用バナー)
-  final String _adUnitId = 'ca-app-pub-3940256099942544/9214589741';
+  final String _adUnitId =
+      'ca-app-pub-3940256099942544/9214589741'; // 本番用広告ユニットIDをここに貼る!!
 
   @override
   void initState() {

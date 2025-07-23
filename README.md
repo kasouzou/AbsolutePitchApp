@@ -1,16 +1,30 @@
-# absolute_pitch_viewer
+#  Absolute Pitch Viewer
 
-A new Flutter project.
+リアルタイムで音を検出して、視覚的に音階を表示する Flutter 製のアプリです。
 
-## Getting Started
+##  主な機能
+- 周囲の音（声・楽器など）をリアルタイムに検出
+- 音階（ドレミなど）を画面に大きく表示
+- 音の履歴ログ表示（※予定）
+- シンプルで見やすいUI
+- オフラインでも動作
+- Google Mobile Ads による広告表示
 
-This project is a starting point for a Flutter application.
+##  使用技術
+- Flutter
+- Dart
+- Kotlin（Androidネイティブ部分）
+- Gradle
+- google_mobile_ads（広告プラグイン）
 
-A few resources to get you started if this is your first Flutter project:
+##  ビルドと実行
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+```bash
+# パッケージを取得
+flutter pub get
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+# エミュレータまたは接続した実機でデバッグ実行
+flutter run
+
+# リリース用ビルド（Android App Bundle）
+flutter build appbundle --release

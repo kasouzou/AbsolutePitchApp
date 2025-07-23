@@ -6,7 +6,7 @@
 
 
     <application
-        android:label="音階ビューア"
+        android:label="{音階ビューア}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
 
